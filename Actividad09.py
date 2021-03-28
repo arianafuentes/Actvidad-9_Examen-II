@@ -20,11 +20,18 @@ import pygeoif
 #TKINTER
 import tkinter as tk
 from tkinter import filedialog
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 archivo_imagen = ""
 archivo_shape = ""
-var_umbral = "1.57E-2"
 product = None
+product_calibrated = None
+flood_mask = None
+#Inicialización de la ventana
+root = tk.Tk()
+root.title("Calculo para zonas inundadas")
+root.geometry("670x800")
+
 ####LEER LOS DATOS DE LA IMAGEN
 def cargarImagen():
     global product
@@ -41,9 +48,10 @@ def cargarImagen():
     print("Name: {}".format(name))
     band_names = product.getBandNames()
     print("Band names: {}".format(", ".join(band_names)))
-
+    print("IMAGEN CARGADA EXITOSAMENTE")
 ##Crear una funcion para mostrar el producto en una
 def plotBand(product, band, vmin, vmax):
+    global root
     band = product.getBand(band)
     w = band.getRasterWidth()
     h = band.getRasterHeight()
@@ -53,15 +61,17 @@ def plotBand(product, band, vmin, vmax):
     band_data.shape = h, w
     width = 12
     height = 12
-    plt.figure(figsize=(width, height))
+    fig = plt.figure(figsize=(width, height))
+    mapa = FigureCanvasTkAgg(fig, master=root)
+    mapa.get_tk_widget().place( x = 10, y = 200 )
     imgplot = plt.imshow(band_data, cmap=plt.cm.binary, vmin=vmin, vmax=vmax)
     return imgplot
-
 
 ##PRE-PROCESAMIENTO
 def preprocesado():
     ##Aplicar correccion orbital
     global product
+    global product_calibrated
     global HashMap
     print(product)
     parameters = HashMap()
@@ -99,7 +109,7 @@ def preprocesado():
     print("Band names: {}".format(", ".join(band_names)))
     band = product_subset.getBand(band_names[0])
     print(band.getRasterSize())
-    plotBand(product_subset, "Intensity_VV", 0, 100000)
+    #plotBand(product_subset, "Intensity_VV", 0, 100000)
     
     ##Aplicar la calibracion de la imagen
     parameters = HashMap()
@@ -108,8 +118,11 @@ def preprocesado():
     parameters.put('selectedPolarisations', "VV")
     parameters.put('outputImageScaleInDb', False)
     product_calibrated = GPF.createProduct("Calibration", parameters, product_subset)
-    plotBand(product_calibrated, "Sigma0_VV", 0, 1)
-    
+    #plotBand(product_calibrated, "Sigma0_VV", 0, 1)
+    print("PREPROCESAMIENTO HECHO EXITOSAMENTE")
+def aplicarFiltro(var_umbral):
+    global root
+    global flood_mask
     ##Aplicar el FILTRO Speckle
     filterSizeY = '5'
     filterSizeX = '5'
@@ -126,7 +139,7 @@ def preprocesado():
     parameters.put('sigmaStr', '0.9')
     parameters.put('anSize', '50')
     speckle_filter = snappy.GPF.createProduct('Speckle-Filter', parameters, product_calibrated)
-    plotBand(speckle_filter, 'Sigma0_VV', 0, 1)
+    #plotBand(speckle_filter, 'Sigma0_VV', 0, 1)
     
     ##Aplicar la correccion del terremo
     parameters = HashMap()
@@ -148,17 +161,15 @@ def preprocesado():
     parameters.put('targetBands', targetBands)
     flood_mask = GPF.createProduct('BandMaths', parameters, speckle_filter_tc)
     plotBand(flood_mask, 'Sigma0_VV_Flooded', 0, 1)
+    print("FILTRO APLICADO EXITOSAMENTE")
     
+def guardarArchivo():
+    global flood_mask
     #Crear la imagen a partir de la mascara
-    print("FIN")
     ProductIO.writeProduct(flood_mask, "C:/CTE_334/Actividad09/final_mask", 'GeoTIFF')
     os.path.exists("C:/CTE_334/Actividad09/final_mask.tif")
+    print("IMAGEN CREADA EXITOSAMENTE A PARTIR DE MASCARA")
 
-
-#Inicialización de la ventana
-root = tk.Tk()
-root.title("Calculo para zonas inundadas")
-root.geometry("670x800")
 
 #StringVar: Variables de control, que asocian widget para almancenar valores
 imagen = tk.StringVar()
@@ -172,18 +183,15 @@ def obtenerImagen():
     global archivo_imagen
     archivo_imagen = filedialog.askopenfilename(initialdir = "/",title = "Select file",filetypes = (("zip files","*.zip"),("all files","*.*")))
     imagen.set(archivo_imagen)
+    cargarImagen()
 def obtenerShapeFile():
     global archivo_shape
     archivo_shape = filedialog.askopenfilename(initialdir = "/",title = "Select file",filetypes = (("shape files","*.shp"),("all files","*.*")))
     shapeFile.set(archivo_shape)
-def preprocesarImagen():
-    cargarImagen()
 def aplicarMascara():
-    global var_umbral
-    var_umbral = "1.57E-2"
-    preprocesado()
-def crearArchivo():
-    print("Crear Archivo")
+    #1.57E-2
+    var_umbral = tk_umbral.get()
+    aplicarFiltro(var_umbral)
 #UI
 #UI_IMAGEN
 butonImagen = tk.Button(root, text="Seleccionar una imagen",command=obtenerImagen)
@@ -196,7 +204,7 @@ butonShape.place(x=marginX, y=50)
 entradaShape = tk.Entry(root, textvariable=shapeFile)
 entradaShape.place(x = marginX + 150, y = 50, width=entryWidth)
 #UI_PREPROCESAR LA IMAGEN
-butonPreProcesar = tk.Button(root, text="Preprocesar imagen",command=preprocesarImagen)
+butonPreProcesar = tk.Button(root, text="Preprocesar imagen",command=preprocesado)
 butonPreProcesar.place(x=marginX, y=80, width=entryWidth + 150)
 #UI_UMBLRAL
 etiquetaUmbral = tk.Label(root, text="Defina el umbral: ")
@@ -207,7 +215,7 @@ entradaUmbral.place(x = marginX + 150, y = 110, width=entryWidth)
 butonAplicarMascara = tk.Button(root, text="Aplicar mascara",command=aplicarMascara)
 butonAplicarMascara.place(x=marginX, y=140, width=entryWidth + 150)
 #UI_CrearArchivo
-butonCrearArchivo = tk.Button(root, text="Crear Archivo",command=crearArchivo)
+butonCrearArchivo = tk.Button(root, text="Crear Archivo",command=guardarArchivo)
 butonCrearArchivo.place(x=marginX, y=170, width=entryWidth + 150)
 
 root.mainloop()
