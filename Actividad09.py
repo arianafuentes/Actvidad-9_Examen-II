@@ -73,6 +73,7 @@ def preprocesado():
     global product
     global product_calibrated
     global HashMap
+    global speckle_filter_tc
     print(product)
     parameters = HashMap()
     GPF.getDefaultInstance().getOperatorSpiRegistry().loadOperatorSpis()
@@ -119,10 +120,7 @@ def preprocesado():
     parameters.put('outputImageScaleInDb', False)
     product_calibrated = GPF.createProduct("Calibration", parameters, product_subset)
     #plotBand(product_calibrated, "Sigma0_VV", 0, 1)
-    print("PREPROCESAMIENTO HECHO EXITOSAMENTE")
-def aplicarFiltro(var_umbral):
-    global root
-    global flood_mask
+    
     ##Aplicar el FILTRO Speckle
     filterSizeY = '5'
     filterSizeX = '5'
@@ -148,7 +146,11 @@ def aplicarFiltro(var_umbral):
     parameters.put('sourceBands', 'Sigma0_VV')
     speckle_filter_tc = GPF.createProduct("Terrain-Correction", parameters, speckle_filter)
     plotBand(speckle_filter_tc, 'Sigma0_VV', 0, 0.1)
-    
+    print("PREPROCESAMIENTO HECHO EXITOSAMENTE")
+def aplicarFiltro(var_umbral):
+    global root
+    global flood_mask
+        
     #Crear una mascara binaria para la inundacion
     parameters = HashMap()
     BandDescriptor = snappy.jpy.get_type('org.esa.snap.core.gpf.common.BandMathsOp$BandDescriptor')
@@ -166,8 +168,11 @@ def aplicarFiltro(var_umbral):
 def guardarArchivo():
     global flood_mask
     #Crear la imagen a partir de la mascara
-    ProductIO.writeProduct(flood_mask, "C:/CTE_334/Actividad09/final_mask", 'GeoTIFF')
-    os.path.exists("C:/CTE_334/Actividad09/final_mask.tif")
+    outpathList = archivo_imagen.split('/')[:-1]
+    outpathStr = '/'.join(outpathList)
+    outFile = outpathStr + '/final_mask'
+    ProductIO.writeProduct(flood_mask, outFile, 'GeoTIFF')
+    
     print("IMAGEN CREADA EXITOSAMENTE A PARTIR DE MASCARA")
 
 
